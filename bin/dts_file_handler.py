@@ -77,15 +77,17 @@ def save_data_db(filemgmt, task_id, metadata, location_info, prov):
 
     filemgmt.ingest_file_metadata(metadata)
     filemgmt.ingest_provenance(prov, {'exec_1': task_id}) 
+    filemgmt.register_file_in_archive({location_info['filename']: location_info}, {'archive': config['archive_name']})
 
 
 def move_file_to_archive(config, delivery_fullname, archive_rel_path):  
     """ Move file to its location in the archive """
     
     basename = os.path.basename(delivery_fullname)
-    path = "%s/%s" % (config['root'], archive_rel_path)
+    root = config['archive'][config['archive_name']]['root']
+    path = "%s/%s" % (root, archive_rel_path)
     dst = "%s/%s" % (path, basename)
-    #print delivery_fullname, dst
+    print delivery_fullname, dst
 
     coremisc.coremakedirs(path)
     shutil.move(delivery_fullname, dst)
@@ -305,6 +307,7 @@ if __name__ == '__main__':
         #valDict = fmutils.get_config_vals({}, config, filemgmt_class.requested_config_vals())
         filemgmt = filemgmt_class(config=config)
         config['filetype_metadata'] = filemgmt.get_all_filetype_metadata()
+        config['archive'] = filemgmt.get_archive_info()
 
         task_id = config['dts_task_id']  # get task id for dts
 
