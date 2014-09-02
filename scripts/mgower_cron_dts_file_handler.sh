@@ -9,21 +9,23 @@ mkdir -p $logdir
 thedate=`/bin/date +%Y%m%d`
 logfile=$logdir/$thedate-handle_file_from_dts.log
 
-echo `/bin/date` "BEG ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^" >> $logfile
+echo `/bin/date` " - " $$ " BEG ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^" >> $logfile
 export DES_DB_SECTION=db-oracle-refact
 
 unset EUPS_DIR
 unset EUPS_PATH
 
+echo `/bin/date` " - " $$ " eups setup main stack " >> $logfile 2>&1
 source /work/apps/RHEL6/dist/eups/desdm_eups_setup.sh 
-#export EUPS_PATH=/work/users/mgower/my_eups_prods:$EUPS_PATH
-#setup --nolocks FWRefact mmg1.0 >> $logfile 2>&1
-setup --nolocks Y2Nstack 1.0.0+0 >> $logfile 2>&1
+setup --nolocks Y2Nstack 1.0.1+0 >> $logfile 2>&1
 
-cd /home/mgower/dts/dtsfilereceiver
+# dtsfilereceiver checkout from svn
+echo `/bin/date` " - " $$ " eups setup dtsfilereceiver " >> $logfile 2>&1
+cd /work/users/mgower/svncheckout/dtsfilereceiver/trunk
 setup --nolocks -r . >> $logfile 2>&1
 
 #echo $DTSFILERECEIVER_DIR
+echo `/bin/date` " - " $$ " running dts_file_handler.py " >> $logfile 2>&1
 dts_file_handler.py --config $DTSFILERECEIVER_DIR/etc/dts_mgower.cfg >> $logfile 2>&1
-echo "dts_file_handler.py exitcode" $?
-echo `/bin/date` "END ############################################################" >> $logfile
+filehandstat=$?
+echo `/bin/date` " - " $$ " dts_file_handler.py exitcode" $filehandstat >> $logfile 2>&1
