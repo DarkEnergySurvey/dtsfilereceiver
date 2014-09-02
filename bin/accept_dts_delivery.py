@@ -96,12 +96,12 @@ if __name__ == '__main__':
         if 'config' not in args:   # dts doesn't pass arguments to command
             progdir = os.path.dirname(__file__)
             args['config'] = "%s/dts_prod.cfg" % progdir
-        print "config file = ", args['config']
+        #print "config file = ", args['config']
         config = read_config(args['config'])
 
         # redirect stdout/stderr to log file 
         log_fullname = create_log_fullname(config)
-        print log_fullname
+        #print log_fullname
         logfh = open(log_fullname, "a")
         sys.stdout = logfh
         sys.stderr = logfh
