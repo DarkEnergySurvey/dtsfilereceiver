@@ -124,32 +124,20 @@ class DTSsnmanifest():
                                     if my_header[i][mandatoryExposureKey]:
                                         coremisc.fwdebug(3, 'DTSSNMANIFEST_DEBUG', "mandatory key '%s' found %s" % (mandatoryExposureKey, my_header[i][mandatoryExposureKey]))
                                         coremisc.fwdebug(6, 'DTSSNMANIFEST_DEBUG', "allExposures in for: %s" % allExposures)
+                                        if key not in all_exposures:
+                                            all_exposures[key] = []
                                         try:
-                                            if i == 0:
-                                                if key == 'acttime':
-                                                    key = 'EXPTIME'
-                                                    all_exposures[key] = [my_header[i][mandatoryExposureKey]]
-                                                elif key == 'filter':
-                                                    key = 'BAND'
-                                                    all_exposures[key] = [str(my_header[i][mandatoryExposureKey])]
-                                                elif key == 'expid':
-                                                    key = 'EXPID'
-                                                    all_exposures[key] = [my_header[i][mandatoryExposureKey]]
-                                                else:
-                                                    all_exposures[key] = [my_header[i][mandatoryExposureKey]]
+                                            if key == 'acttime':
+                                                key = 'EXPTIME'
+                                                all_exposures[key].append(my_header[i][mandatoryExposureKey])
+                                            elif key == 'filter':
+                                                key = 'BAND'
+                                                all_exposures[key].append(str(my_header[i][mandatoryExposureKey]))
+                                            elif key == 'expid':
+                                                key = 'EXPNUM'
+                                                all_exposures[key].append(my_header[i][mandatoryExposureKey])
                                             else:
-                                                if key == 'acttime':
-                                                    key = 'EXPTIME'
-                                                    all_exposures[key].append(my_header[i][mandatoryExposureKey])
-                                                elif key == 'filter':
-                                                    key = 'BAND'
-                                                    all_exposures[key].append(str(my_header[i][mandatoryExposureKey]))
-                                                elif key == 'expid':
-                                                    key = 'EXPID'
-                                                    all_exposures[key].append(my_header[i][mandatoryExposureKey])
-                                                else:
-                                                    all_exposures[key].append(my_header[i][mandatoryExposureKey])
-                                                
+                                                all_exposures[key].append(my_header[i][mandatoryExposureKey])
                                         except KeyError:
                                             all_exposures[key] = [my_header[i][mandatoryExposureKey]]
     
@@ -170,6 +158,8 @@ class DTSsnmanifest():
                         else: 
                             newfield = myfield
 
+                        camsym = 'D'   # no way to currently tell CAMSYM/INSTRUME from manifest file
+
                         if not newfield.startswith('SN-'):
                             raise ValueError("Invalid field (%s).  set_type = '%s'" % (newfield, my_head['set_type']))
 
@@ -187,6 +177,7 @@ class DTSsnmanifest():
                                 all_exposures['MANIFEST_FILENAME'] = [jsonFile]
                                 all_exposures['NITE'] = [nite]
                                 all_exposures['SEQNUM'] = [1]
+                                all_exposures['CAMSYM'] = [camsym]
                             else:
                                 #all_exposures['FIELD'].append(str(my_head['set_type']))
                                 all_exposures['FIELD'].append(newfield)
@@ -194,6 +185,7 @@ class DTSsnmanifest():
                                 all_exposures['MANIFEST_FILENAME'].append(jsonFile)
                                 all_exposures['NITE'].append(nite)
                                 all_exposures['SEQNUM'].append(1)
+                                all_exposures['CAMSYM'].append(camsym)
         
         # Add the manifest filename value in the dictionary
         #all_exposures['MANIFEST_FILENAME'] = json_file
@@ -235,28 +227,8 @@ class DTSsnmanifest():
         """
         Ingest all the exposures in EXPOSURES_IN_MANIFEST and SN_SUBMIT_REQUEST
     
-        EXPOSURES_IN_MANIFEST
-        Name                       Null?    Type
-        ----------------------------------------- -------- ----------------------------
-        EXPOSURE_FILENAME               NOT NULL VARCHAR2(50)
-        MANIFEST_FILENAME               NOT NULL VARCHAR2(50)
-        FIELD                           NOT NULL VARCHAR2(20)
-        BAND                           NOT NULL VARCHAR2(5)
-        EXPTIME                       NOT NULL BINARY_FLOAT
-    
-        SN_SUBMIT_REQUEST
-        Name                       Null?    Type
-        ----------------------------------------- -------- ----------------------------
-        FIELD                           NOT NULL VARCHAR2(20)
-        NITE                           NOT NULL VARCHAR2(8)
-        BAND                           NOT NULL VARCHAR2(5)
-        MANIFEST_FILENAME              NOT NULL VARCHAR2(50)
-        FIRST_EXPNUM                   NOT NULL NUMBER(10)
-        SEQNUM                        NOT NULL NUMBER(2)  
-     
         #If SEQNUM is > 1, then it means the same field was taken again during the same night.
         #This will only happens in rare occasion when the sequence had to be aborted before it finished.
-    
     
         :param allExposures: Dictionary with the following keys:
         [set_type,createdAt,expid,object,date,acttime,filter]
@@ -264,21 +236,8 @@ class DTSsnmanifest():
         """
     
     
-        for i,exp in enumerate(allExposures['EXPID']):
-            exp = str(exp)
-            if len(exp) == 6:
-                exposurename = 'DECam_00' + exp + '.fits'
-            elif len(exp) == 7:
-                exposurename = 'DECam_0' + exp + '.fits'
-            elif len(exp) == 8:
-                exposurename = 'DECam_' + exp + '.fits'
-            if i == 0:
-                allExposures['EXPOSURE_FILENAME'] = [exposurename]
-            else:
-                allExposures['EXPOSURE_FILENAME'].append(exposurename)
-            
         newdictionary = {}
-        for key in ['EXPOSURE_FILENAME','MANIFEST_FILENAME','FIELD','BAND','EXPTIME']:
+        for key in ['CAMSYM', 'EXPNUM','MANIFEST_FILENAME','FIELD','BAND','EXPTIME', 'NITE']:
             newdictionary[key] = allExposures[key]
     
         #print "xx",allExposures
@@ -290,8 +249,8 @@ class DTSsnmanifest():
                 dict2Ingest[keytoingest] = valuetoingest
             coremisc.fwdebug(6, 'DTSSNMANIFEST_DEBUG', "dict2Ingest %s " % (dict2Ingest))
             try:
-                sqlInsertExposuresInManifest = """insert into EXPOSURES_IN_MANIFEST (EXPOSURE_FILENAME,MANIFEST_FILENAME,FIELD,BAND,EXPTIME) VALUES 
-                                    (:EXPOSURE_FILENAME, :MANIFEST_FILENAME, :FIELD, :BAND, :EXPTIME)""" 
+                sqlInsertExposuresInManifest = """insert into MANIFEST_EXPOSURE (CAMSYM,EXPNUM,MANIFEST_FILENAME,NITE,FIELD,BAND,EXPTIME) VALUES 
+                                    (:CAMSYM, :EXPNUM, :MANIFEST_FILENAME, :NITE, :FIELD, :BAND, :EXPTIME)""" 
             
     
                 coremisc.fwdebug(3, 'DTSSNMANIFEST_DEBUG', "sqlInsertExposuresInManifest %s " % (sqlInsertExposuresInManifest))
@@ -366,7 +325,7 @@ class DTSsnmanifest():
             newDic['NITE'] = allExposures['NITE'][index]
             newDic['BAND'] = allExposures['BAND'][index]
             newDic['MANIFEST_FILENAME'] = allExposures['MANIFEST_FILENAME'][index]
-            newDic['FIRST_EXPNUM'] = allExposures['EXPID'][index]
+            newDic['FIRST_EXPNUM'] = allExposures['EXPNUM'][index]
             newDic['SEQNUM'] = allExposures['SEQNUM'][index]
             coremisc.fwdebug(6, 'DTSSNMANIFEST_DEBUG', "index=%s, newDic=%s" % (index, newDic))
         
