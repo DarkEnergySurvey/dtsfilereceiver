@@ -102,11 +102,9 @@ class DTSsnmanifest():
                         #read all the exposures that were taken for the set_type in header
                         my_header =  value
     
-                        numseq = my_header[0]['sequence']
-                        
                         #Total Number of exposures in manifest file 
-                        tot_exposures = numseq['seqtot']
-                        
+                        tot_exposures = len(my_header)
+
                         if tot_exposures is None or tot_exposures == 0:    
                             raise Exception("0 SN exposures parsed from json file")
 
@@ -116,6 +114,10 @@ class DTSsnmanifest():
                             if mytime > 10 and numseq['seqnum'] == 2:
                                 first_expnum = my_header[i]['expid']
                             
+                            #Validate if acctime has a meaningful value. If acttime = 0.0, then it's a bad exposure. Skip it from the manifest.
+                            if mytime == 0.0:
+                                continue
+                                
                             try:
                                 for mandatoryExposureKey in (allMandatoryExposureKeys):
                                     coremisc.fwdebug(3, 'DTSSNMANIFEST_DEBUG', "mandatory key %s" % mandatoryExposureKey)
@@ -124,8 +126,7 @@ class DTSsnmanifest():
                                     if my_header[i][mandatoryExposureKey]:
                                         coremisc.fwdebug(3, 'DTSSNMANIFEST_DEBUG', "mandatory key '%s' found %s" % (mandatoryExposureKey, my_header[i][mandatoryExposureKey]))
                                         coremisc.fwdebug(6, 'DTSSNMANIFEST_DEBUG', "allExposures in for: %s" % allExposures)
-                                        if key not in all_exposures:
-                                            all_exposures[key] = []
+
                                         try:
                                             if key == 'acttime':
                                                 key = 'EXPTIME'
@@ -170,6 +171,8 @@ class DTSsnmanifest():
                             raise Exception("0 SN exposures parsed from json file")
 
                         for i in range(tot_exposures):
+                            if my_header[i]['acttime'] == 0.0:
+                                continue
                             if i == 0:
                                 #all_exposures['FIELD'] = [str(my_head['set_type'])]
                                 all_exposures['FIELD'] = [newfield]
