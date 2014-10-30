@@ -8,6 +8,7 @@ import re
 import argparse
 import shutil # move file
 import traceback
+import hashlib
 from datetime import datetime, timedelta
 
 
@@ -16,8 +17,28 @@ import coreutils.desdbi as desdbi
 import coreutils.miscutils as coremisc
 import filemgmt.utils as fmutils
 
-#manifest_SN-X3enqueuedon2014-01-2700:54:04ZbySupernovaDeadmanTactician.json
 
+def read_notify_file(notify_file):
+    """ Return contents of notify file as dictionary """
+    notifydict = {}
+    with open(notify_file, "r") as fh:
+        for line in fh:
+            m = re.match("^\s*(\S+)\s*=(.+)\s*$", line)
+            notifydict[m.group(1).strip().lower()] = m.group(2).strip()
+    return notifydict
+
+
+def calc_md5sum(filename, blsize=2**20):
+    """ Calculate md5sum for file """
+
+    md5 = hashlib.md5()
+    with open(filename, "rb") as fh:
+        data = fh.read(blsize)
+        while data:
+            md5.update(data)
+            data = fh.read(blsize)
+
+    return md5.hexdigest()
 
 
 def stop_if_already_running():
@@ -80,7 +101,7 @@ def save_data_db(filemgmt, task_id, metadata, location_info, prov):
     filemgmt.register_file_in_archive({location_info['filename']: location_info}, {'archive': config['archive_name']})
 
 
-def move_file_to_archive(config, delivery_fullname, archive_rel_path):  
+def move_file_to_archive(config, delivery_fullname, archive_rel_path, dts_md5sum):  
     """ Move file to its location in the archive """
     
     basename = os.path.basename(delivery_fullname)
@@ -90,16 +111,44 @@ def move_file_to_archive(config, delivery_fullname, archive_rel_path):
     print delivery_fullname, dst
 
     coremisc.coremakedirs(path)
-    shutil.move(delivery_fullname, dst)
+
+    #shutil.move(delivery_fullname, dst)  replace move by cp+unlink
+    max_cp_tries = 5
+    cp_cnt = 1
+    copied = False
+    while cp_cnt <= max_cp_tries and not copied: 
+        shutil.copy2(delivery_fullname, dst) # similar to cp -p
+
+        starttime = datetime.now()
+        md5_after_move = calc_md5sum(dst)
+        endtime = datetime.now()
+        print "%s: md5sum after move %s (%s secs)" % (delivery_fullname, md5_after_move, (endtime-starttime).total_seconds()) 
+
+        if dts_md5sum is None: 
+            copied = True
+        elif dts_md5sum != md5_after_move:
+            print "Warning: md5 doesn't match after cp (%s, %s)" % (delivery_fullname, dst)
+            time.sleep(5)
+            os.unlink(dst)   # remove bad file from archive
+            cp_cnt += 1
+        else:
+            copied = True
+
+    if not copied:
+        raise Exception("Error: cannot cp file without md5sum problems.")
+
+    os.unlink(delivery_fullname)
 
     (path, filename, compress) = coremisc.parse_fullname(dst, coremisc.CU_PARSE_PATH | \
                                                               coremisc.CU_PARSE_FILENAME | \
                                                               coremisc.CU_PARSE_EXTENSION)
+
     fileinfo = {'fullname': dst,
                 'filename' : filename,
                 'compression': compress,
                 'path': path,
-                'filesize': os.path.getsize(dst)}
+                'filesize': os.path.getsize(dst),
+                'md5sum': md5_after_move }
 
     return fileinfo
 
@@ -117,10 +166,19 @@ def handle_file(notify_file, delivery_fullname, config, filemgmt, task_id):
     """ Performs steps necessary for each file """
 
     filetype = None
-    valid = False
     metadata = None
     location_info = None
     prov = None
+
+    # read values from notify file
+    notifydict = read_notify_file(notify_file)
+
+    # use dts_md5sum from notify_file
+    dts_md5sum = None
+    if 'md5sum' in notifydict:
+        dts_md5sum = notifydict['md5sum']
+
+    print "%s: dts md5sum = %s" % (delivery_fullname, dts_md5sum)
 
     #print config.keys()
     try: 
@@ -135,6 +193,15 @@ def handle_file(notify_file, delivery_fullname, config, filemgmt, task_id):
             os.unlink(notify_file)
             return
             
+        if dts_md5sum is not None:
+            starttime = datetime.now()
+            md5_before_move = calc_md5sum(delivery_fullname)
+            endtime = datetime.now()
+            print "%s: md5sum before move %s (%s secs)" % (delivery_fullname, md5_before_move, (endtime-starttime).total_seconds()) 
+            if md5_before_move != dts_md5sum:
+                print "%s: dts md5sum = %s" % (delivery_fullname, dts_md5sum)
+                print "%s: py  md5sum = %s" % (delivery_fullname, md5_before_move)
+                raise Exception("Error: md5sum in delivery dir not the same as DTS-provided md5sum")
 
         if not check_already_registered(filename, filemgmt):
             filetype = determine_filetype(filename, config)
@@ -159,7 +226,7 @@ def handle_file(notify_file, delivery_fullname, config, filemgmt, task_id):
             coremisc.fwdebug(3, "DTSFILEHANDLER_DEBUG", 'archive_rel_path = %s' % archive_rel_path)
             coremisc.fwdebug(3, "DTSFILEHANDLER_DEBUG", 'prov = %s' % prov)
 
-            location_info = move_file_to_archive(config, delivery_fullname, archive_rel_path)
+            location_info = move_file_to_archive(config, delivery_fullname, archive_rel_path, dts_md5sum)
 
             save_data_db(filemgmt, task_id, {'file_1': metadata}, location_info, prov)
 
@@ -170,7 +237,7 @@ def handle_file(notify_file, delivery_fullname, config, filemgmt, task_id):
             os.unlink(notify_file)
         else:
             handle_bad_file(config, notify_file, delivery_fullname, filemgmt, 
-                            filetype, valid, metadata, location_info, prov, 
+                            filetype, metadata, location_info, prov, 
                             "already registered")
     except Exception as err:
         (type, value, trback) = sys.exc_info()
@@ -227,6 +294,15 @@ def handle_bad_file(config, notify_file, delivery_fullname, dbh,
 
     # save information in db about bad file
     row = {}
+
+    # save extra metadata if it exists
+    if metadata is not None:
+        badcols = dbh.get_column_names('DTS_BAD_FILE')
+
+        for c in badcols:
+            if c in metadata:
+                row[c] = metadata[c]
+
     row['task_id'] = config['dts_task_id']
     t = os.path.getmtime(notify_file)
     row['delivery_date'] = datetime.fromtimestamp(t)
@@ -237,6 +313,7 @@ def handle_bad_file(config, notify_file, delivery_fullname, dbh,
     row['filesize'] = os.path.getsize(destbad)
     if filetype is not None:
         row['filetype'] = filetype
+
 
     dbh.basic_insert_row('DTS_BAD_FILE', row)
     dbh.commit()

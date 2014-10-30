@@ -18,7 +18,8 @@ import sys
 def parse_arguments(argv):
 
     parser = argparse.ArgumentParser(description='Accept a file from DTS')
-    parser.add_argument('--config', action='store', type=str)
+    parser.add_argument('--config', action='store', type=str, required=True)
+    parser.add_argument('--md5sum', action='store', type=str)
     parser.add_argument('fullname', nargs=1, action='store')
 
     args = vars(parser.parse_args(argv))   # convert dict
@@ -76,7 +77,7 @@ def touch_file(fname):
         open(fname, 'a').close()
 
 
-def notify_file_delivered(fullname, config):
+def notify_file_delivered(fullname, config, md5sum):
     """  """
 
     makedirs(config['delivery_notice_dir'])
@@ -85,7 +86,12 @@ def notify_file_delivered(fullname, config):
 
     notifyfile = "%s/%s.dts" % (config['delivery_notice_dir'], os.path.basename(fullname))
     print "%s - notify file - %s=%s" % (create_timestamp(), fullname, notifyfile)
-    touch_file(notifyfile)
+
+    if md5sum is None:
+        touch_file(notifyfile)
+    else:
+        with open(notifyfile, "w") as fh:
+            fh.write("md5sum = %s\n" % md5sum)
 
 
 if __name__ == '__main__':
@@ -106,7 +112,11 @@ if __name__ == '__main__':
         sys.stdout = logfh
         sys.stderr = logfh
 
-        notify_file_delivered(args['fullname'][0], config)
+        dts_md5sum = None
+        if 'md5sum' in args:
+            dts_md5sum = args['md5sum']
+
+        notify_file_delivered(args['fullname'][0], config, dts_md5sum)
 
         logfh.close()
     except: 
