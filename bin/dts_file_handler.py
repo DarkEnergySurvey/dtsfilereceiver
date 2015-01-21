@@ -249,6 +249,10 @@ def handle_file(notify_file, delivery_fullname, config, filemgmt, task_id):
         handle_bad_file(config, notify_file, delivery_fullname, filemgmt, 
                         filetype, metadata, location_info, prov, 
                         "Exception: %s" % err)
+    except SystemExit:   # Wrappers code calls exit if cannot find header value
+        handle_bad_file(config, notify_file, delivery_fullname, filemgmt, 
+                        filetype, metadata, location_info, prov, 
+                        "SystemExit: Probably missing header value.  Check log for error msg.")
         
     filemgmt.commit()
 
