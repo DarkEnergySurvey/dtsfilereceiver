@@ -15,7 +15,7 @@ from collections import OrderedDict
 import pyfits
 from datetime import datetime
 
-import coreutils.miscutils as coremisc
+import despymisc.miscutils as miscutils
 import intgutils.metautils as metautils
 import wrappers.WrapperUtils as wraputils
 import wrappers.WrapperFuncs as wrapfuncs
@@ -42,7 +42,7 @@ class DTSraw():
             for line in fh:
                 line = line.upper()
                 
-                (keyname, pri, ext) = coremisc.fwsplit(line, ',')
+                (keyname, pri, ext) = miscutils.fwsplit(line, ',')
                 if pri != 'Y' and pri != 'N' and pri != 'R':
                     raise ValueError('Error: Invalid primary entry in keyword file (%s)' % line)
                 if ext != 'Y' and ext != 'N' and ext != 'R':
@@ -181,7 +181,7 @@ class DTSraw():
         if (not(os.path.isfile(fullname))):
             raise Exception("Exposure not found: '%s'" % fullname)
 
-        filename = coremisc.parse_fullname(fullname, coremisc.CU_PARSE_FILENAME)
+        filename = miscutils.parse_fullname(fullname, miscutils.CU_PARSE_FILENAME)
 
         row = {}
         row['filename'] = filename
@@ -224,5 +224,4 @@ class DTSraw():
 
     ###################################################################### 
     def post_steps(self, fullname): # e.g., Rasicam
-        print "post_steps called"
         self.insert_rasicam(fullname)

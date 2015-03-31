@@ -27,5 +27,24 @@ def convert_UTCstr_to_nite(datestr):
     return nite
 
 
+def determine_filetype(filename):
+    """ Returns the filetype of the given file or None if cannot determine filetype """
+    filetype = None
+
+    if filename.endswith('.fits'):
+        filetype = 'raw'
+    elif filename.startswith('manifest_SN') and filename.endswith('.json'):
+        filetype = 'snmanifest'
+
+    return filetype
+
+
+def check_already_registered(filename, filemgmt):
+    """ Throws exception if file is already registered """
+
+    has_meta = filemgmt.file_has_metadata([filename])
+    return len(has_meta) == 1
+
+
 if __name__ == '__main__':
     pass

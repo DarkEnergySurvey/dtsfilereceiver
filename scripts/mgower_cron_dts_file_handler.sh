@@ -17,7 +17,7 @@ unset EUPS_PATH
 
 echo `/bin/date` " - " $$ " eups setup main stack " >> $logfile 2>&1
 source /work/apps/RHEL6/dist/eups/desdm_eups_setup.sh 
-setup --nolocks Y2Nstack 1.0.1+0 >> $logfile 2>&1
+setup --nolocks Y2Nstack 1.0.6+0 >> $logfile 2>&1
 
 # dtsfilereceiver checkout from svn
 echo `/bin/date` " - " $$ " eups setup dtsfilereceiver " >> $logfile 2>&1

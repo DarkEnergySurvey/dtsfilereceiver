@@ -8,14 +8,13 @@
 
 __version__ = "$Rev$"
 
-import coreutils.miscutils as coremisc
+import despymisc.miscutils as miscutils
 import dtsfilereceiver.dts_utils as dtsutils
 import json
 import cx_Oracle
 from collections import defaultdict
 
-import coreutils.desdbi
-
+#import despydb.desdbi
 
 class DTSsnmanifest():
     """
@@ -38,7 +37,7 @@ class DTSsnmanifest():
     def get_metadata(self, fullname):
         ftype = 'snmanifest'
 
-        filename = coremisc.parse_fullname(fullname, coremisc.CU_PARSE_FILENAME)
+        filename = miscutils.parse_fullname(fullname, miscutils.CU_PARSE_FILENAME)
         filemeta = {'file_1': {'filename': filename, 'filetype':ftype}}
         self.filemeta = filemeta['file_1']
 
@@ -78,7 +77,7 @@ class DTSsnmanifest():
     ###################################################################### 
     def read_json_single(self, json_file,allMandatoryExposureKeys, debug):
     
-        coremisc.fwdebug(3, 'DTSSNMANIFEST_DEBUG', "reading file %s" % json_file)
+        miscutils.fwdebug(3, 'DTSSNMANIFEST_DEBUG', "reading file %s" % json_file)
 
         allExposures = []
             
@@ -120,12 +119,12 @@ class DTSsnmanifest():
                                 
                             try:
                                 for mandatoryExposureKey in (allMandatoryExposureKeys):
-                                    coremisc.fwdebug(3, 'DTSSNMANIFEST_DEBUG', "mandatory key %s" % mandatoryExposureKey)
+                                    miscutils.fwdebug(3, 'DTSSNMANIFEST_DEBUG', "mandatory key %s" % mandatoryExposureKey)
                                     key = str(mandatoryExposureKey)
                                     
                                     if my_header[i][mandatoryExposureKey]:
-                                        coremisc.fwdebug(3, 'DTSSNMANIFEST_DEBUG', "mandatory key '%s' found %s" % (mandatoryExposureKey, my_header[i][mandatoryExposureKey]))
-                                        coremisc.fwdebug(6, 'DTSSNMANIFEST_DEBUG', "allExposures in for: %s" % allExposures)
+                                        miscutils.fwdebug(3, 'DTSSNMANIFEST_DEBUG', "mandatory key '%s' found %s" % (mandatoryExposureKey, my_header[i][mandatoryExposureKey]))
+                                        miscutils.fwdebug(6, 'DTSSNMANIFEST_DEBUG', "allExposures in for: %s" % allExposures)
 
                                         try:
                                             if key == 'acttime':
@@ -144,7 +143,7 @@ class DTSsnmanifest():
     
     
                             except KeyError:
-                                coremisc.fwdebug(0, 'DTSSNMANIFEST_DEBUG', "keyError: missing key %s in json entity: %s " % (mandatoryExposureKey,line))
+                                miscutils.fwdebug(0, 'DTSSNMANIFEST_DEBUG', "keyError: missing key %s in json entity: %s " % (mandatoryExposureKey,line))
                                 errorFlag = 1
                                 raise
                         
@@ -165,7 +164,7 @@ class DTSsnmanifest():
                             raise ValueError("Invalid field (%s).  set_type = '%s'" % (newfield, my_head['set_type']))
 
                         #if json_file contains a path or compression extension, then cut it to only the filename
-                        jsonFile = coremisc.parse_fullname(json_file, coremisc.CU_PARSE_FILENAME)
+                        jsonFile = miscutils.parse_fullname(json_file, miscutils.CU_PARSE_FILENAME)
                         
                         if tot_exposures is None or tot_exposures == 0:    
                             raise Exception("0 SN exposures parsed from json file")
@@ -192,7 +191,7 @@ class DTSsnmanifest():
         
         # Add the manifest filename value in the dictionary
         #all_exposures['MANIFEST_FILENAME'] = json_file
-        coremisc.fwdebug(6, 'DTSSNMANIFEST_DEBUG', "allExposures " % (all_exposures))
+        miscutils.fwdebug(6, 'DTSSNMANIFEST_DEBUG', "allExposures " % (all_exposures))
         
         return all_exposures
     
@@ -209,7 +208,7 @@ class DTSsnmanifest():
         try:      
             cur = dbh.cursor()        
             cur.execute(query,dictionary)
-            coremisc.fwdebug(6, 'DTSSNMANIFEST_DEBUG', "dictionary into database " % (dictionary))
+            miscutils.fwdebug(6, 'DTSSNMANIFEST_DEBUG', "dictionary into database " % (dictionary))
             success = 1
         #except cx_Oracle.IntegrityError as e:
         except cx_Oracle.DatabaseError as e:
@@ -250,17 +249,17 @@ class DTSsnmanifest():
                 keytoingest = key
                 valuetoingest = newdictionary[key][i]
                 dict2Ingest[keytoingest] = valuetoingest
-            coremisc.fwdebug(6, 'DTSSNMANIFEST_DEBUG', "dict2Ingest %s " % (dict2Ingest))
+            miscutils.fwdebug(6, 'DTSSNMANIFEST_DEBUG', "dict2Ingest %s " % (dict2Ingest))
             try:
                 sqlInsertExposuresInManifest = """insert into MANIFEST_EXPOSURE (CAMSYM,EXPNUM,MANIFEST_FILENAME,NITE,FIELD,BAND,EXPTIME) VALUES 
                                     (:CAMSYM, :EXPNUM, :MANIFEST_FILENAME, :NITE, :FIELD, :BAND, :EXPTIME)""" 
             
     
-                coremisc.fwdebug(3, 'DTSSNMANIFEST_DEBUG', "sqlInsertExposuresInManifest %s " % (sqlInsertExposuresInManifest))
+                miscutils.fwdebug(3, 'DTSSNMANIFEST_DEBUG', "sqlInsertExposuresInManifest %s " % (sqlInsertExposuresInManifest))
                 success = self.insert_dictionary_2Db(dbh, sqlInsertExposuresInManifest, dict2Ingest, debug=debug)
             
                 if success:
-                    coremisc.fwdebug(1, 'DTSSNMANIFEST_DEBUG', "Insert into EXPOSURES_IN_MANIFEST was successful..")
+                    miscutils.fwdebug(1, 'DTSSNMANIFEST_DEBUG', "Insert into EXPOSURES_IN_MANIFEST was successful..")
                 
             except cx_Oracle.IntegrityError as e:
                 print "error while inserting into EXPOSURES_IN_MANIFEST: ", e 
@@ -276,16 +275,16 @@ class DTSsnmanifest():
     
         #Determine index of list for exptime = 10. (poiting exposure)
         allexps=  allExposures['EXPTIME']
-        coremisc.fwdebug(6, 'DTSSNMANIFEST_DEBUG', "all exptimes %s" % (allexps))
+        miscutils.fwdebug(6, 'DTSSNMANIFEST_DEBUG', "all exptimes %s" % (allexps))
         for i,val in enumerate(allexps):
             if val == 10.0:
                 pointingIndex = i
             
-        coremisc.fwdebug(3, 'DTSSNMANIFEST_DEBUG', "pointing Exposure index is %s" % pointingIndex)
+        miscutils.fwdebug(3, 'DTSSNMANIFEST_DEBUG', "pointing Exposure index is %s" % pointingIndex)
 
         #find where there are repetead bands, but exclude the band where the exptime = 10
         ListofBands = allExposures['BAND']
-        coremisc.fwdebug(3, 'DTSSNMANIFEST_DEBUG', "listOfaBands...%s" % ListofBands)
+        miscutils.fwdebug(3, 'DTSSNMANIFEST_DEBUG', "listOfaBands...%s" % ListofBands)
 
         bandsDicIndexes = defaultdict(list)
 
@@ -298,9 +297,9 @@ class DTSsnmanifest():
         ind2use = []
         flag_first = 0
         for ind, b in enumerate(ListofBands):
-            coremisc.fwdebug(6, 'DTSSNMANIFEST_DEBUG', "indexes %s %s" % (bandsDicIndexes[b], ind))
+            miscutils.fwdebug(6, 'DTSSNMANIFEST_DEBUG', "indexes %s %s" % (bandsDicIndexes[b], ind))
             if ind == pointingIndex:
-                coremisc.fwdebug(3, 'DTSSNMANIFEST_DEBUG', "found pointing index %s %s " % (ind, pointingIndex))
+                miscutils.fwdebug(3, 'DTSSNMANIFEST_DEBUG', "found pointing index %s %s " % (ind, pointingIndex))
                 continue
             else:
                 #for two exposures and one of them is the poiting
@@ -330,18 +329,18 @@ class DTSsnmanifest():
             newDic['MANIFEST_FILENAME'] = allExposures['MANIFEST_FILENAME'][index]
             newDic['FIRST_EXPNUM'] = allExposures['EXPNUM'][index]
             newDic['SEQNUM'] = allExposures['SEQNUM'][index]
-            coremisc.fwdebug(6, 'DTSSNMANIFEST_DEBUG', "index=%s, newDic=%s" % (index, newDic))
+            miscutils.fwdebug(6, 'DTSSNMANIFEST_DEBUG', "index=%s, newDic=%s" % (index, newDic))
         
             #Ingest into the database each of them
             try:
                 sqlInsertSNSubmitRequest = """insert into SN_SUBMIT_REQUEST (FIELD,NITE,BAND,MANIFEST_FILENAME,FIRST_EXPNUM,SEQNUM) VALUES 
                                             (:FIELD, :NITE, :BAND, :MANIFEST_FILENAME, :FIRST_EXPNUM, :SEQNUM)""" 
         
-                coremisc.fwdebug(3, 'DTSSNMANIFEST_DEBUG', "sqlInsertSNSubmitRequest = %s" % sqlInsertExposuresInManifest)
+                miscutils.fwdebug(3, 'DTSSNMANIFEST_DEBUG', "sqlInsertSNSubmitRequest = %s" % sqlInsertExposuresInManifest)
 
                 success = self.insert_dictionary_2Db(dbh,sqlInsertSNSubmitRequest, newDic,debug=debug)
                 if success:
-                    coremisc.fwdebug(1, 'DTSSNMANIFEST_DEBUG', "Insert into SN_SUBMIT_REQUEST was successful..")
+                    miscutils.fwdebug(1, 'DTSSNMANIFEST_DEBUG', "Insert into SN_SUBMIT_REQUEST was successful..")
         
             except cx_Oracle.IntegrityError as e:
                 print "error while inserting into SN_SUBMIT_REQUEST: ", e 

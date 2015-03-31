@@ -13,9 +13,11 @@ from datetime import datetime, timedelta
 
 
 import intgutils.wclutils as wclutils
-import coreutils.desdbi as desdbi
-import coreutils.miscutils as coremisc
+import despyDMdb.desDMdbi as desDMdbi
+import despymisc.miscutils as miscutils
 import filemgmt.utils as fmutils
+import filemgmt.disk_utils_local as diskutils
+import dtsfilereceiver.utils as dtsutils
 
 
 def read_notify_file(notify_file):
@@ -26,19 +28,6 @@ def read_notify_file(notify_file):
             m = re.match("^\s*(\S+)\s*=(.+)\s*$", line)
             notifydict[m.group(1).strip().lower()] = m.group(2).strip()
     return notifydict
-
-
-def calc_md5sum(filename, blsize=2**20):
-    """ Calculate md5sum for file """
-
-    md5 = hashlib.md5()
-    with open(filename, "rb") as fh:
-        data = fh.read(blsize)
-        while data:
-            md5.update(data)
-            data = fh.read(blsize)
-
-    return md5.hexdigest()
 
 
 def stop_if_already_running():
@@ -52,53 +41,22 @@ def stop_if_already_running():
         sys.exit(0)
 
 
-def determine_filetype(filename, config):
-    """ Returns the filetype of the given file or None if cannot determine filetype """
-    filetype = None
+def save_data_db(filemgmt, task_id, metadata, disk_info, prov):
+    """ Call functions to save information about files to database """
+    # metadata: 
+    # disk_info:
+    # prov:
 
-    #print filename
-
-    if filename.endswith('.fits'):
-        filetype = 'raw'
-    elif filename.startswith('manifest_SN') and filename.endswith('.json'):
-        filetype = 'snmanifest' 
-
-    return filetype
-
-
-def check_already_registered(filename, filemgmt):
-    """ Throws exception if file is already registered """
-
-    #print "check_already_registered: %s" % filename
-    
-    has_meta = filemgmt.file_has_metadata([filename])
-    if len(has_meta)  == 1:
-        raise Exception("%s already exists in DB" % filename) 
-
-    #sql = "select count(*) from genfile where filename=%s" % dbh.get_named_bind_string('filename')
-    #print sql
-    #curs = dbh.cursor()
-    #curs.execute(sql, {'filename': filename})
-    #(number_of_rows,)=curs.fetchone()
-    #if int(number_of_rows) == 1:
-    #    raise Exception("%s already exists in DB" % filename) 
-    #elif int(number_of_rows) > 1:
-    #    raise Exception("Programming error: genfile query returned more than 1 result for %s" % filename)
-    
-
-def save_data_db(filemgmt, task_id, metadata, location_info, prov):
-    #print "save_data_db"
 
     if metadata is None:
         raise Exception("Error: save_data_db metadata is None")
-    if location_info is None:
-        raise Exception("Error: save_data_db location_info is None")
+    if disk_info is None:
+        raise Exception("Error: save_data_db disk_info is None")
     if  prov is None:
         raise Exception("Error: save_data_db prov is None")
 
-    filemgmt.ingest_file_metadata(metadata)
-    filemgmt.ingest_provenance(prov, {'exec_1': task_id}) 
-    filemgmt.register_file_in_archive({location_info['filename']: location_info}, {'archive': config['archive_name']})
+    filemgmt.save_file_info(disk_info, metadata, prov, {'exec_1': task_id}) 
+    filemgmt.register_file_in_archive({disk_info['filename']: disk_info}, {'archive': config['archive_name']})
 
 
 def move_file_to_archive(config, delivery_fullname, archive_rel_path, dts_md5sum):  
@@ -110,23 +68,26 @@ def move_file_to_archive(config, delivery_fullname, archive_rel_path, dts_md5sum
     dst = "%s/%s" % (path, basename)
     print delivery_fullname, dst
 
-    coremisc.coremakedirs(path)
+    miscutils.coremakedirs(path)
 
     #shutil.move(delivery_fullname, dst)  replace move by cp+unlink
     max_cp_tries = 5
     cp_cnt = 1
     copied = False
+    fileinfo = {}
     while cp_cnt <= max_cp_tries and not copied: 
         shutil.copy2(delivery_fullname, dst) # similar to cp -p
-
         starttime = datetime.now()
-        md5_after_move = calc_md5sum(dst)
+        fileinfo = diskutils.get_single_file_disk_info(dst, True, root) 
         endtime = datetime.now()
-        print "%s: md5sum after move %s (%s secs)" % (delivery_fullname, md5_after_move, (endtime-starttime).total_seconds()) 
+
+        print "%s: md5sum after move %s (%0.2f secs)" % (delivery_fullname, 
+                                                         fileinfo['md5sum'], 
+                                                         endtime-starttime) 
 
         if dts_md5sum is None: 
             copied = True
-        elif dts_md5sum != md5_after_move:
+        elif dts_md5sum != fileinfo['md5sum']:
             print "Warning: md5 doesn't match after cp (%s, %s)" % (delivery_fullname, dst)
             time.sleep(5)
             os.unlink(dst)   # remove bad file from archive
@@ -139,23 +100,23 @@ def move_file_to_archive(config, delivery_fullname, archive_rel_path, dts_md5sum
 
     os.unlink(delivery_fullname)
 
-    (path, filename, compress) = coremisc.parse_fullname(dst, coremisc.CU_PARSE_PATH | \
-                                                              coremisc.CU_PARSE_FILENAME | \
-                                                              coremisc.CU_PARSE_EXTENSION)
-
-    fileinfo = {'fullname': dst,
-                'filename' : filename,
-                'compression': compress,
-                'path': path,
-                'filesize': os.path.getsize(dst),
-                'md5sum': md5_after_move }
+    #(path, filename, compress) = miscutils.parse_fullname(dst, miscutils.CU_PARSE_PATH | \
+    #                                                          miscutils.CU_PARSE_FILENAME | \
+    #                                                          miscutils.CU_PARSE_EXTENSION)
+    #
+    #fileinfo = {'fullname': dst,
+    #            'filename' : filename,
+    #            'compression': compress,
+    #            'path': path,
+    #            'filesize': os.path.getsize(dst),
+    #            'md5sum': md5_after_move }
 
     return fileinfo
 
 
 def generate_provenance(fullname):
     """ Generate provenance wcl """
-    (fname, compression) = coremisc.parse_fullname(fullname, coremisc.CU_PARSE_FILENAME | coremisc.CU_PARSE_EXTENSION)
+    (fname, compression) = miscutils.parse_fullname(fullname, miscutils.CU_PARSE_FILENAME | miscutils.CU_PARSE_EXTENSION)
     if compression is not None:
         fname += compression
     prov = {'was_generated_by': {'exec_1': fname}}    # includes compression extension
@@ -167,7 +128,7 @@ def handle_file(notify_file, delivery_fullname, config, filemgmt, task_id):
 
     filetype = None
     metadata = None
-    location_info = None
+    disk_info = None
     prov = None
 
     # read values from notify file
@@ -182,8 +143,8 @@ def handle_file(notify_file, delivery_fullname, config, filemgmt, task_id):
 
     #print config.keys()
     try: 
-        filename = coremisc.parse_fullname(delivery_fullname, coremisc.CU_PARSE_FILENAME)
-        coremisc.fwdebug(0, "DTSFILEHANDLER_DEBUG", "filename = %s" % filename)
+        filename = miscutils.parse_fullname(delivery_fullname, miscutils.CU_PARSE_FILENAME)
+        miscutils.fwdebug(0, "DTSFILEHANDLER_DEBUG", "filename = %s" % filename)
 
         if not os.path.exists(delivery_fullname):
             print "Warning:  delivered file does not exist:"
@@ -195,49 +156,51 @@ def handle_file(notify_file, delivery_fullname, config, filemgmt, task_id):
             
         if dts_md5sum is not None:
             starttime = datetime.now()
-            md5_before_move = calc_md5sum(delivery_fullname)
+            fileinfo_before_move = diskutils.get_single_file_disk_info(deliver_fullname, True, None) 
             endtime = datetime.now()
-            print "%s: md5sum before move %s (%s secs)" % (delivery_fullname, md5_before_move, (endtime-starttime).total_seconds()) 
-            if md5_before_move != dts_md5sum:
+            print "%s: md5sum before move %s (%0.2f secs)" % (delivery_fullname, 
+                                                              fileinfo_before_move['md5sum'], 
+                                                              endtime-starttime)
+            if fileinfo_before_move['md5sum'] != dts_md5sum:
                 print "%s: dts md5sum = %s" % (delivery_fullname, dts_md5sum)
-                print "%s: py  md5sum = %s" % (delivery_fullname, md5_before_move)
+                print "%s: py  md5sum = %s" % (delivery_fullname, fileinfo_before_move['md5sum'])
                 raise Exception("Error: md5sum in delivery dir not the same as DTS-provided md5sum")
 
-        if not check_already_registered(filename, filemgmt):
-            filetype = determine_filetype(filename, config)
-            coremisc.fwdebug(3, "DTSFILEHANDLER_DEBUG", "filetype = %s" % filetype)
+        if not dtsutils.check_already_registered(filename, filemgmt):
+            filetype = dtsutils.determine_filetype(filename)
+            miscutils.fwdebug(3, "DTSFILEHANDLER_DEBUG", "filetype = %s" % filetype)
 
             # dynamically load class specific to filetype
             classkey = 'dts_filetype_class_' + filetype
-            filetype_class = coremisc.dynamically_load_class(config[classkey]) 
+            filetype_class = miscutils.dynamically_load_class(config[classkey]) 
             valDict = fmutils.get_config_vals({}, config, filetype_class.requested_config_vals())
             filetypeObj = filetype_class(dbh=filemgmt, config=valDict)
 
             metadata = filetypeObj.get_metadata(delivery_fullname)
             metadata['filename'] = filename 
             metadata['filetype'] = filetype
-            coremisc.fwdebug(3, "DTSFILEHANDLER_DEBUG", 'len(metadata) = %s' % len(metadata))
-            coremisc.fwdebug(6, "DTSFILEHANDLER_DEBUG", 'metadata = %s' % metadata)
+            miscutils.fwdebug(3, "DTSFILEHANDLER_DEBUG", 'len(metadata) = %s' % len(metadata))
+            miscutils.fwdebug(6, "DTSFILEHANDLER_DEBUG", 'metadata = %s' % metadata)
 
             filetypeObj.check_valid(delivery_fullname)  # should raise exception if not valid
-            archive_rel_path = filetypeObj.get_archive_path(delivery_fullname)
             prov = generate_provenance(delivery_fullname)
 
-            coremisc.fwdebug(3, "DTSFILEHANDLER_DEBUG", 'archive_rel_path = %s' % archive_rel_path)
-            coremisc.fwdebug(3, "DTSFILEHANDLER_DEBUG", 'prov = %s' % prov)
+            miscutils.fwdebug(3, "DTSFILEHANDLER_DEBUG", 'archive_rel_path = %s' % archive_rel_path)
+            miscutils.fwdebug(3, "DTSFILEHANDLER_DEBUG", 'prov = %s' % prov)
 
-            location_info = move_file_to_archive(config, delivery_fullname, archive_rel_path, dts_md5sum)
+            archive_rel_path = filetypeObj.get_archive_path(delivery_fullname)
+            disk_info = move_file_to_archive(config, delivery_fullname, archive_rel_path, dts_md5sum)
 
-            save_data_db(filemgmt, task_id, {'file_1': metadata}, location_info, prov)
+            save_data_db(filemgmt, task_id, {'file_1': metadata}, disk_info, prov)
 
-            filetypeObj.post_steps(location_info['fullname'])  # e.g., Rasicam
+            filetypeObj.post_steps(disk_info['fullname'])  # e.g., Rasicam
 
             # if success
             filemgmt.commit()
             os.unlink(notify_file)
         else:
             handle_bad_file(config, notify_file, delivery_fullname, filemgmt, 
-                            filetype, metadata, location_info, prov, 
+                            filetype, metadata, disk_info, prov, 
                             "already registered")
     except Exception as err:
         (type, value, trback) = sys.exc_info()
@@ -247,11 +210,11 @@ def handle_file(notify_file, delivery_fullname, config, filemgmt, task_id):
         print "******************************"
 
         handle_bad_file(config, notify_file, delivery_fullname, filemgmt, 
-                        filetype, metadata, location_info, prov, 
+                        filetype, metadata, disk_info, prov, 
                         "Exception: %s" % err)
     except SystemExit:   # Wrappers code calls exit if cannot find header value
         handle_bad_file(config, notify_file, delivery_fullname, filemgmt, 
-                        filetype, metadata, location_info, prov, 
+                        filetype, metadata, disk_info, prov, 
                         "SystemExit: Probably missing header value.  Check log for error msg.")
         
     filemgmt.commit()
@@ -259,26 +222,26 @@ def handle_file(notify_file, delivery_fullname, config, filemgmt, task_id):
 
 
 def handle_bad_file(config, notify_file, delivery_fullname, dbh, 
-                    filetype, metadata, location_info, prov, msg):
+                    filetype, metadata, disk_info, prov, msg):
     """ Perform steps required by any bad file """
 
     dbh.rollback()  # undo any db changes for this file
 
-    coremisc.fwdebug(0, "DTSFILEHANDLER_DEBUG", "delivery_fullname = %s" % delivery_fullname)
-    coremisc.fwdebug(0, "DTSFILEHANDLER_DEBUG", "filetype = %s" % filetype)
-    coremisc.fwdebug(0, "DTSFILEHANDLER_DEBUG", "msg = %s" % msg)
-    coremisc.fwdebug(0, "DTSFILEHANDLER_DEBUG", "metadata = %s" % metadata)
-    coremisc.fwdebug(0, "DTSFILEHANDLER_DEBUG", "location_info = %s" % location_info)
-    coremisc.fwdebug(0, "DTSFILEHANDLER_DEBUG", "prov = %s" % prov)
+    miscutils.fwdebug(0, "DTSFILEHANDLER_DEBUG", "delivery_fullname = %s" % delivery_fullname)
+    miscutils.fwdebug(0, "DTSFILEHANDLER_DEBUG", "filetype = %s" % filetype)
+    miscutils.fwdebug(0, "DTSFILEHANDLER_DEBUG", "msg = %s" % msg)
+    miscutils.fwdebug(0, "DTSFILEHANDLER_DEBUG", "metadata = %s" % metadata)
+    miscutils.fwdebug(0, "DTSFILEHANDLER_DEBUG", "disk_info = %s" % disk_info)
+    miscutils.fwdebug(0, "DTSFILEHANDLER_DEBUG", "prov = %s" % prov)
 
     today = datetime.now()
     datepath = "%04d/%02d" % (today.year, today.month)
 
     # where is file now
-    if location_info is None:
+    if disk_info is None:
         orig_fullname = delivery_fullname
     else:
-        orig_fullname = location_info['fullname']
+        orig_fullname = disk_info['fullname']
 
     # create a uniq name for living in the "bad file" area
     # contains relative path for storing in DB
@@ -289,11 +252,11 @@ def handle_bad_file(config, notify_file, delivery_fullname, dbh,
     destbad = "%s/%s" % (config['bad_file_dir'], uniq_fullname)
 
     if os.path.exists(destbad):
-        coremisc.fwdebug(0, "DTSFILEHANDLER_DEBUG", "WARNING: bad file already exists (%s)" % destbad)
+        miscutils.fwdebug(0, "DTSFILEHANDLER_DEBUG", "WARNING: bad file already exists (%s)" % destbad)
         os.remove(destbad)
     
     # make directory in "bad file" area and move file there
-    coremisc.coremakedirs(os.path.dirname(destbad))
+    miscutils.coremakedirs(os.path.dirname(destbad))
     shutil.move(orig_fullname, destbad) 
 
     # save information in db about bad file
@@ -381,10 +344,10 @@ if __name__ == '__main__':
     #print filepairs
 
     if (len(filepairs) > 0):
-        #dbh = desdbi.DesDbi(config['des_services'],config['des_db_section'])
+        #dbh = desDMdbi.desDMdbi(config['des_services'],config['des_db_section'])
         filemgmt = None
 
-        filemgmt_class = coremisc.dynamically_load_class(config['classmgmt'])
+        filemgmt_class = miscutils.dynamically_load_class(config['classmgmt'])
         #valDict = fmutils.get_config_vals({}, config, filemgmt_class.requested_config_vals())
         filemgmt = filemgmt_class(config=config)
         config['filetype_metadata'] = filemgmt.get_all_filetype_metadata()

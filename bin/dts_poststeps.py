@@ -1,76 +1,105 @@
 #!/usr/bin/env python
+# $Id$
+# $Rev::                                  $:  # Revision of last commit.
+# $LastChangedBy::                        $:  # Author of last commit.
+# $LastChangedDate::                      $:  # Date of last commit.
 
-import commands
+""" Manually run the DTS post register steps """
+
 import os
-import time
 import sys
-import re
 import argparse
-import shutil # move file
-import traceback
-from datetime import datetime, timedelta
-
 
 import intgutils.wclutils as wclutils
-import coreutils.desdbi as desdbi
-import coreutils.miscutils as coremisc
+import despymisc.miscutils as miscutils
 import filemgmt.utils as fmutils
-import dtsfilehandler.dtsutils as dtsutils
+import dtsfilereceiver.dts_utils as dtsutils
 
 #manifest_SN-X3enqueuedon2014-01-2700:54:04ZbySupernovaDeadmanTactician.json
 
 
-def run_post_steps(fullname, config, filemgmt):
+def run_post_steps(filelist, config, fmobj):
     """ Performs steps necessary for each file """
 
-    print config.keys()
+    #print config.keys()
+    firstname = miscutils.parse_fullname(filelist[0], miscutils.CU_PARSE_FILENAME)
+    filetype = dtsutils.determine_filetype(firstname)
+    miscutils.fwdebug(3, "DTSFILEHANDLER_DEBUG", "filetype = %s" % filetype)
 
-    filename = coremisc.parse_fullname(fullname, coremisc.CU_PARSE_FILENAME)
-    coremisc.fwdebug(0, "DTSFILEHANDLER_DEBUG", "filename = %s" % filename)
+    # dynamically load class specific to filetype
+    classkey = 'dts_filetype_class_' + filetype
+    filetype_class = miscutils.dynamically_load_class(config[classkey])
+    valdict = fmutils.get_config_vals({}, config, filetype_class.requested_config_vals())
+    ftobj = filetype_class(dbh=fmobj, config=valdict)
 
-    if not check_already_registered(filename, filemgmt):
-        filetype = determine_filetype(filename, config)
-        coremisc.fwdebug(0, "DTSFILEHANDLER_DEBUG", "filetype = %s" % filetype)
+    for fullname in filelist:
+        filename = miscutils.parse_fullname(fullname, miscutils.CU_PARSE_FILENAME)
+        miscutils.fwdebug(3, "DTSFILEHANDLER_DEBUG", "filename = %s" % filename)
 
-        # dynamically load class specific to filetype
-        classkey = 'dts_filetype_class_' + filetype
-        filetype_class = coremisc.dynamically_load_class(config[classkey]) 
-        valDict = fmutils.get_config_vals({}, config, filetype_class.requested_config_vals())
-        filetypeObj = filetype_class(dbh=filemgmt, config=valDict)
+        if dtsutils.check_already_registered(filename, fmobj):
+            ftobj.post_steps(fullname)  # e.g., Rasicam
 
-        filetypeObj.post_steps(location_info['fullname'])  # e.g., Rasicam
-        filemgmt.commit()
-    else:
-        print "File must already be registered in order to run post_steps"
+            # if success
+            fmobj.commit()
+        else:
+            print "File must already be registered in order to run post_steps"
 
-                            
+
 
 ###########################################################################
 def parse_cmdline(argv):
     """ Parse command line and return dictionary of values """
 
-    parser = argparse.ArgumentParser(description='Handle files delivered by DTS') 
+    parser = argparse.ArgumentParser(description='Run poststeps on files same as DTS')
     parser.add_argument('--config', action='store', required=True)
-    parser.add_argument('fullname', action='store')
+
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('--path', action='store', help='path containing files of same filetype')
+    group.add_argument('--file', action='store', help='single full filename')
 
     args = vars(parser.parse_args(argv))   # convert to dict
     return args
 
 
 ###########################################################################
-if __name__ == '__main__':
+def get_list_filenames(path):
+    """ create a list of files in given path """
+
+    if not os.path.exists(path):
+        miscutils.fwdie("Error:   could not find path:  %s" % path, 1)
+
+    filelist = []
+    for (dirpath, dirnames, filenames) in os.walk(path):
+        for fname in filenames:
+            filelist.append(dirpath+'/'+fname)
+
+    return filelist
+
+
+###########################################################################
+def main():
+    """ Perform steps """
     sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)  # turn off buffering of stdout
 
     args = parse_cmdline(sys.argv[1:])
-    print args
 
     config = None
-    with open(args['config'], 'r') as fh:
-        config = wclutils.read_wcl(fh)
+    with open(args['config'], 'r') as cfgfh:
+        config = wclutils.read_wcl(cfgfh)
 
-    filemgmt_class = coremisc.dynamically_load_class(config['classmgmt'])
-    #valDict = fmutils.get_config_vals({}, config, filemgmt_class.requested_config_vals())
-    filemgmt = filemgmt_class(config=config)
+    filemgmt_class = miscutils.dynamically_load_class(config['classmgmt'])
+    #valdict = fmutils.get_config_vals({}, config, filemgmt_class.requested_config_vals())
+    fmobj = filemgmt_class(config=config)
 
-       handle_file(fpair[0], fpair[1], config, filemgmt, task_id)
+    filelist = None
+    if args['file'] is not None:
+        filelist = [args['file']]
+    else:
+        filelist = get_list_filenames(args['path'])
 
+    run_post_steps(filelist, config, fmobj)
+
+
+###########################################################################
+if __name__ == '__main__':
+    main()

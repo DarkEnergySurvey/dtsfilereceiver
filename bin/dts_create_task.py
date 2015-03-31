@@ -8,7 +8,7 @@
 
 import argparse
 import sys
-import coreutils.desdbi as desdbi
+import despydb.desdbi as desdbi
 
 ###########################################################################
 def parse_cmdline(argv):
