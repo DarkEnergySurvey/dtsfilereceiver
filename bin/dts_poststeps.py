@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-# $Id$
-# $Rev::                                  $:  # Revision of last commit.
-# $LastChangedBy::                        $:  # Author of last commit.
-# $LastChangedDate::                      $:  # Date of last commit.
+# $Id: dts_poststeps.py 36974 2015-03-31 14:45:54Z mgower $
+# $Rev:: 36974                            $:  # Revision of last commit.
+# $LastChangedBy:: mgower                 $:  # Author of last commit.
+# $LastChangedDate:: 2015-03-31 09:45:54 #$:  # Date of last commit.
 
 """ Manually run the DTS post register steps """
 

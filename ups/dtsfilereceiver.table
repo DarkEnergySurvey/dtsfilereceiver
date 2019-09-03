@@ -1,2 +1,3 @@
+setupRequired(FileMgmt, 2.0.9+0)
 envPrepend(PATH, ${PRODUCT_DIR}/bin)
 envPrepend(PYTHONPATH, ${PRODUCT_DIR}/python)
