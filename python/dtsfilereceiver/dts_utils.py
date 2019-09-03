@@ -1,32 +1,27 @@
 #!/usr/bin/env python
+# $Id: dts_utils.py 43145 2016-07-15 15:38:09Z mgower $
+# $Rev:: 43145                            $:  # Revision of last commit.
+# $LastChangedBy:: mgower                 $:  # Author of last commit.
+# $LastChangedDate:: 2016-07-15 10:38:09 #$:  # Date of last commit.
 
-import datetime
-import pytz
-from dateutil.parser import parse
+""" Miscellaneous functions for the DTS file accept and receiver codes """
 
-def convert_UTCstr_to_nite(datestr):
-    # e.g. datestr: 2014-08-15T17:31:02.416533+00:00
-    nite = None
+import re
 
-    # convert date string to datetime object
-    utc_dt = parse(datestr)
+######################################################################
+def read_config(cfgfile):
+    """ Read the configuration file into a dictionary """
+    config = {}
+    with open(cfgfile, "r") as cfgfh:
+        for line in cfgfh:
+            line = line.strip()
+            if len(line) > 0 and not line.startswith('#'):
+                lmatch = re.match(r"([^=]+)\s*=\s*(.*)$", line)
+                config[lmatch.group(1).strip()] = lmatch.group(2).strip()
 
-    # convert utc to local on mountain
-    local_tz = pytz.timezone('Chile/Continental') # use your local timezone name here
-    local_dt = utc_dt.replace(tzinfo=pytz.utc).astimezone(local_tz)
-    local_dt = local_tz.normalize(local_dt) # .normalize might be unnecessary
+    return config
 
-    # see if before or after noon on mountain
-    noon_dt = local_dt.replace(hour=12, minute=0, second=0, microsecond=0)
-    if local_dt < noon_dt:  # if before noon, observing nite has previous date
-        obsdate = (local_dt - datetime.timedelta(days=1)).date()
-    else:
-        obsdate = local_dt.date()
-
-    nite = obsdate.strftime('%Y%m%d')
-    return nite
-
-
+######################################################################
 def determine_filetype(filename):
     """ Returns the filetype of the given file or None if cannot determine filetype """
     filetype = None
@@ -39,12 +34,12 @@ def determine_filetype(filename):
     return filetype
 
 
+######################################################################
 def check_already_registered(filename, filemgmt):
     """ Throws exception if file is already registered """
 
-    has_meta = filemgmt.file_has_metadata([filename])
+    has_meta = filemgmt.has_metadata_ingested([filename])
     return len(has_meta) == 1
-
 
 if __name__ == '__main__':
     pass

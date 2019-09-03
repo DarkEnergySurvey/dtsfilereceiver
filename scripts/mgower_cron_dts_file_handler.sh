@@ -1,6 +1,6 @@
 #!/bin/sh
 
-BASELOGDIR=/cluster_scratch/users/mgower/test_dts/dts_file_handler_logs
+BASELOGDIR=/des008/cluster_scratch/users/mgower/test_dts/dts_file_handler_logs
 
 themonth=`/bin/date +%Y/%m`
 logdir=$BASELOGDIR/$themonth
